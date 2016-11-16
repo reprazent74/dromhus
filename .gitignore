@@ -1,2 +1,4 @@
 *.sqlite
 /data
+urls.txt
+log.txt
