@@ -37,7 +37,8 @@ class Log
 	end
 
 	def self.write(str)
-		open(@@log_file, 'a') { |f| f.puts now().ljust(25) + str }
+		timestamp = Time.now.to_s.split(" ").slice(0,2).join(" ").ljust(25)
+		open(@@log_file, 'a') { |f| f.puts timestamp + str }
 	end
 end
 
@@ -61,7 +62,8 @@ def get_html(link, do_hard_fetch=false)
 end
 
 def now
-	Time.now.to_s.split(" ").slice(0,2).join(" ")
+	t = Time.now
+	"#{t.year}-#{t.mon}-#{t.day} #{t.hour}:00"
 end
 
 module Database
@@ -74,22 +76,15 @@ module Database
 			Log.write "Table: '#{name}' created"
 		end
 	end
-	
+
 	def Database.db_create_tables
 		# 3 tables are needed: objects, datapoints, viewings
 		Database.db_create_table("objects", "id INTEGER PRIMARY KEY AUTOINCREMENT, link TEXT, first_seen DATE, last_seen DATE, address TEXT, address_ort TEXT, address_kommun TEXT, firma TEXT, maklare TEXT, utgangspris INTEGER, boarea INTEGER, biarea INTEGER, tomtarea INTEGER, rum INTEGER, driftskostnad INTEGER, alive TEXT")
 		Database.db_create_table("datapoints", "id INTEGER PRIMARY KEY AUTOINCREMENT, object INTEGER, date DATE, hits INTEGER, FOREIGN KEY(object) REFERENCES objects(id)")
-		Database.db_create_table("visning", "id INTEGER PRIMARY KEY AUTOINCREMENT, object INTEGER, date DATE, FOREIGN KEY(object) REFERENCES objects(id)")
 	end
 
 	def Database.db_get_live_objects
 		@db.execute( "SELECT link FROM objects WHERE alive='YES'" ).flatten
-	end
-
-	def Database.db_get_datapoints(link)
-		primary_key = @db.execute( "SELECT id FROM objects WHERE link='#{link}'" ).flatten.first
-		data = @db.execute( "SELECT date, hits FROM datapoints WHERE object='#{primary_key}'" )
-		data.each { |e| p e }
 	end
 
 	def Database.db_export_objects
@@ -99,8 +94,20 @@ module Database
 		data.map { |e| e.join(";") }.join("\n")
 	end
 
-	def Database.db_export_hits(link)
-		# Export a CSV for the pageviews for a particular object
+	def Database.db_export_datapoints
+		# For all objects, export a series of datapoints with date & time and hits
+		# 1) Get list of objects to get
+		# 2) Get data for object
+		# 3) Export data
+
+		data = @db.execute( "SELECT date, object, hits FROM datapoints")
+		# objects = @db.execute( "SELECT id FROM objects" ).flatten
+		# data = objects.map { |o| @db.execute( "SELECT object, date, time, hits FROM datapoints WHERE object='#{o}'") }
+		# # Only the hour is of interest, filter out the rest
+		# data.each { |e| e.each { |f| f[2] = f[2].truncate_minutes } }
+		print data
+		# data = @db.execute( "SELECT date, time, hits FROM datapoints WHERE object='#{primary_key}'" )
+		# data.each { |e| p e }
 	end
 
 	def Database.db_close
@@ -148,6 +155,7 @@ module Database
 		# Mark all items as no longer alive (0) first and then mark the ones still in list as alive (1)
 		@db.execute( "UPDATE objects SET alive = 'NO'" )
 		links.each { |link| @db.execute( "UPDATE objects SET alive = 'YES' WHERE link='#{link}'" ) }
+		links.each { |link| @db.execute( "UPDATE objects SET last_seen='#{now()}' WHERE link='#{link}'" ) }
 	end
 
 	def Database.web_add_datapoint(link)
@@ -155,14 +163,15 @@ module Database
 		page = get_html(link, true)
 		object_id = @db.execute( "SELECT * FROM objects WHERE link='#{link}'" ).first.first
 		hits = page.css('.property-stats__visits').text.gsub(/[[:space:]]/, '').to_i
-		@db.execute("INSERT OR IGNORE INTO datapoints VALUES ( NULL, ?, ?, ?)", object_id, now(), hits )
+		@db.execute("INSERT OR IGNORE INTO datapoints VALUES ( NULL, ?, ?, ? )", object_id, now(), hits )
 	end
 end
 
 # MAIN
 ##########
 
-options = {:url => "urls.txt"}
+options = { :url => "urls.txt" }
+
 OptionParser.new do |opts|
   opts.banner = "Usage: dromhus.rb [options]"
 
@@ -170,15 +179,15 @@ OptionParser.new do |opts|
     options[:scrape] = s
   end
 
-  opts.on("-u", "--url", "file containing the url(s) to scrape, default: 'urls.txt'") do |u|
+  opts.on("-u", "--url", "File containing the url(s) to scrape, default: 'urls.txt'") do |u|
     options[:url] = u
   end
 
-  opts.on("-o", "--object", "export object data as csv") do |o|
+  opts.on("-o", "--object", "Export object data as csv") do |o|
     options[:object] = o
   end
 
-  opts.on("-d", "--datapoints", "export datapoints data as csv") do |d|
+  opts.on("-d", "--datapoints", "Export datapoints data as csv") do |d|
     options[:datapoints] = d
   end
 
@@ -201,4 +210,12 @@ if (options[:scrape] != nil)
 	get_file(options[:url]).split("\n").each { |url| Database.web_update_objects(url) }
 	# Add datapoints for all 'live' objects
 	Database.db_get_live_objects.each { |link| Database.web_add_datapoint(link) }
+end
+
+if (options[:object] != nil)
+	print Database.db_export_objects
+end
+
+if (options[:datapoints] != nil)
+	print Database.db_export_datapoints
 end
