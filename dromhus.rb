@@ -29,10 +29,10 @@ def write_only_changes_to_file( file, contents )
 end
 
 class Log
+	@@log_file = ""
 
-	@@log_file = "log.txt"
-
-	def initialize
+	def self.set_log_file(file)
+		@@log_file = file
 		write_file(@@log_file, "") unless (File.exist?(@@log_file))
 	end
 
@@ -68,7 +68,10 @@ end
 
 module Database
 
-	@db = File.exists?( "data.sqlite" ) ? SQLite3::Database.open( "data.sqlite" ) : SQLite3::Database.new( "data.sqlite" )
+	def Database.init(db_file)
+		@db_file_name = db_file
+		@db = File.exists?( @db_file_name ) ? SQLite3::Database.open( @db_file_name ) : SQLite3::Database.new( @db_file_name )
+	end
 
 	def Database.db_create_table(name, fields)
 		if (@db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='#{name}'").empty? == true)
@@ -165,17 +168,27 @@ end
 # MAIN
 ##########
 
-options = { :url => "urls.txt" }
+# Setup
+script_path = File.dirname(__FILE__)
+Log.set_log_file("#{script_path}/log.txt")
+Log.write "Script run"
+Database.init("#{script_path}/data.sqlite")
+Dir.mkdir "#{script_path}/data" unless File.exists?("#{script_path}/data")
 
+url_file = "#{script_path}/urls.txt"
+# File with urls must exist
+if (File.exists?(url_file) == false)
+	puts "url file '#{url_file}' missing"
+	exit 1
+end
+
+# Parse options and run program
+options = {}
 OptionParser.new do |opts|
   opts.banner = "Usage: dromhus.rb [options]"
 
   opts.on("-s", "--scrape", "Scrape web") do |s|
     options[:scrape] = s
-  end
-
-  opts.on("-u", "--url", "File containing the url(s) to scrape, default: 'urls.txt'") do |u|
-    options[:url] = u
   end
 
   opts.on("-o", "--object", "Export object data as csv") do |o|
@@ -188,21 +201,11 @@ OptionParser.new do |opts|
 
 end.parse!
 
-# File with urls must exist
-if (File.exists?(options[:url]) == false)
-	puts "url file '#{options[:url]}' missing"
-	exit 1
-end
-
-Dir.mkdir 'data' unless File.exists?('data')
-
-Log.new
-
 if (options[:scrape] != nil)
 	# make sure database tables exist 
 	Database.db_create_tables
 	# Add new and update still 'live' objects in database
-	get_file(options[:url]).split("\n").each { |url| Database.web_update_objects(url) }
+	get_file(url_file).split("\n").each { |url| Database.web_update_objects(url) }
 	# Add datapoints for all 'live' objects
 	Database.db_get_live_objects.each { |link| Database.web_add_datapoint(link) }
 end
@@ -214,5 +217,3 @@ end
 if (options[:datapoints] != nil)
 	print Database.db_export_datapoints
 end
-
-Log.write "Script run"
