@@ -215,4 +215,4 @@ if (options[:datapoints] != nil)
 	print Database.db_export_datapoints
 end
 
-Log.write "Executed"
+Log.write "Script run"
