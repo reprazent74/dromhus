@@ -55,7 +55,7 @@ def get_html(link, do_hard_fetch=false)
 	else
 		Log.write "Fetching from web '#{link}'"
 		contents = Nokogiri::HTML(HTTParty.get("http://www.hemnet.se" + link))
-		write_only_changes_to_file(file_name, contents)
+		#write_only_changes_to_file(file_name, contents)
 		sleep(1)
 		return contents
 	end
