@@ -63,7 +63,7 @@ end
 
 def now
 	t = Time.now
-	"#{t.year}-#{t.mon}-#{t.day} #{t.hour}:00"
+	"#{t.year}-#{t.mon}-#{t.day} #{t.hour.to_s.rjust(2,"0")}:00"
 end
 
 module Database
@@ -95,19 +95,14 @@ module Database
 	end
 
 	def Database.db_export_datapoints
-		# For all objects, export a series of datapoints with date & time and hits
-		# 1) Get list of objects to get
-		# 2) Get data for object
-		# 3) Export data
-
-		data = @db.execute( "SELECT date, object, hits FROM datapoints")
-		# objects = @db.execute( "SELECT id FROM objects" ).flatten
-		# data = objects.map { |o| @db.execute( "SELECT object, date, time, hits FROM datapoints WHERE object='#{o}'") }
-		# # Only the hour is of interest, filter out the rest
-		# data.each { |e| e.each { |f| f[2] = f[2].truncate_minutes } }
-		print data
-		# data = @db.execute( "SELECT date, time, hits FROM datapoints WHERE object='#{primary_key}'" )
-		# data.each { |e| p e }
+		# Create an array of nils, number of different objects long
+		cols = Array.new(@db.execute( "SELECT object FROM datapoints" ).flatten.max, nil)
+		# Find all unique dates and insert nil array into date-sub arrays
+		export_data = @db.execute( "SELECT date FROM datapoints ORDER BY date ASC").flatten.uniq.each_with_object({}) { |v, hash| hash[v] = [v].concat(cols.dup) }
+		# Populate array with the correct data from database
+		@db.execute( "SELECT date, object, hits FROM datapoints").each { |e| export_data[e[0]][e[1]] = e[2] }
+		# Create output format with date as first column and then the different objects in the other columns
+		export_data.values.map { |e| e.join(";") }.join("\n")
 	end
 
 	def Database.db_close
