@@ -91,7 +91,7 @@ module Database
 		# Export all objects as CSV, let each row hold the information about one object.
 		data = @db.execute( "SELECT * FROM objects" )
 		data.each { |e| e[1] = "http://www.hemnet.se" + e[1] }
-		data.map { |e| e.join(";") }.join("\n")
+		data.map { |e| e.join(";") }.join("\n") + "\n"
 	end
 
 	def Database.db_export_datapoints
