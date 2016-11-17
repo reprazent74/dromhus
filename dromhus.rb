@@ -102,7 +102,7 @@ module Database
 		# Populate array with the correct data from database
 		@db.execute( "SELECT date, object, hits FROM datapoints").each { |e| export_data[e[0]][e[1]] = e[2] }
 		# Create output format with date as first column and then the different objects in the other columns
-		export_data.values.map { |e| e.join(";") }.join("\n")
+		export_data.values.map { |e| e.join(";") }.join("\n") + "\n"
 	end
 
 	def Database.db_close
