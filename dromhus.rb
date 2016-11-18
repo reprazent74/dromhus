@@ -48,17 +48,14 @@ class String
 	end
 end
 
-def get_html(link, do_hard_fetch=false)
-	file_name = "data/" + link.split('/')[-1] + ".html"
-	if (File.exist?(file_name) && !do_hard_fetch)
-		return Nokogiri::HTML(get_file(file_name))
-	else
-		Log.write "Fetching from web '#{link}'"
-		contents = Nokogiri::HTML(HTTParty.get("http://www.hemnet.se" + link))
-		#write_only_changes_to_file(file_name, contents)
-		sleep(1)
-		return contents
-	end
+def get_html(url)
+	sleep(1)
+	Log.write "Fetching '#{url}'"
+	Nokogiri::HTML(HTTParty.get(url))
+end
+
+def get_html_append_prefix(url)
+	get_html("http://www.hemnet.se" + url)
 end
 
 def now
@@ -118,7 +115,7 @@ module Database
 		result = @db.execute( "SELECT id FROM objects WHERE link='#{link}'" )
 		return if (result.size != 0)
 
-		page = get_html(link)
+		page = get_html_append_prefix(link)
 
 		pris = page.css('.property__price').text.gsub(/[[:space:]]/, '').to_i
 
@@ -147,8 +144,19 @@ module Database
 
 	# Retrieves a search page and enters the results found into the object table in the database
 	def Database.web_update_objects(url)
-		page = Nokogiri::HTML(HTTParty.get(url))
-		links = page.css('ul#search-results').xpath('//a[@class="item-link-container" and not(@data-tally-path)]').map { |e| e["href"] }
+		page1 = Nokogiri::HTML(HTTParty.get(url))
+		# This is just the first page, there might be more results. Get all pages and store in array
+		# 50 objects per page
+		nbr_of_extra_pages = (page1.xpath('//li[@class="active"]//span[@class="result-list-segment-control__badge"]').text.to_i - 1) / 50
+		# Continued results are suffixed by &page=2 etc. Create urls and fetch them
+		extra_urls = Array.new(nbr_of_extra_pages) { |i| i + 2 }.map { |e| "#{url}&page=#{e}" }
+		# Contents of all object pages
+		pages = [ page1, *extra_urls.map { |u| get_html(u) } ]
+
+		links = Array.new
+		pages.each { |page| links << page.css('ul#search-results').xpath('//a[@class="item-link-container" and not(@data-tally-path)]').map { |e| e["href"] } }
+		links.flatten!
+
 		links.each { |link| Database.web_add_object(link) }
 		# Mark all items as no longer alive (0) first and then mark the ones still in list as alive (1)
 		@db.execute( "UPDATE objects SET alive = 'NO'" )
@@ -158,7 +166,7 @@ module Database
 
 	def Database.web_add_datapoint(link)
 		# Get data from object page
-		page = get_html(link, true)
+		page = get_html_append_prefix(link)
 		object_id = @db.execute( "SELECT * FROM objects WHERE link='#{link}'" ).first.first
 		hits = page.css('.property-stats__visits').text.gsub(/[[:space:]]/, '').to_i
 		@db.execute("INSERT OR IGNORE INTO datapoints VALUES ( NULL, ?, ?, ? )", object_id, now(), hits )
@@ -173,7 +181,6 @@ script_path = File.dirname(__FILE__)
 Log.set_log_file("#{script_path}/log.txt")
 Log.write "Script run"
 Database.init("#{script_path}/data.sqlite")
-Dir.mkdir "#{script_path}/data" unless File.exists?("#{script_path}/data")
 
 url_file = "#{script_path}/urls.txt"
 # File with urls must exist
