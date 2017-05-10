@@ -147,21 +147,23 @@ module Database
 		page1 = Nokogiri::HTML(HTTParty.get(url))
 		# This is just the first page, there might be more results. Get all pages and store in array
 		# 50 objects per page
-		nbr_of_extra_pages = (page1.xpath('//li[@class="active"]//span[@class="result-list-segment-control__badge"]').text.to_i - 1) / 50
+		text = page1.css("div[class='result-tools clear-children']").text
+#		nbr_of_extra_pages = (page1.xpath('//div[@class="result-tools clear children"]').text.to_i - 1) / 50
+		puts text
 		# Continued results are suffixed by &page=2 etc. Create urls and fetch them
-		extra_urls = Array.new(nbr_of_extra_pages) { |i| i + 2 }.map { |e| "#{url}&page=#{e}" }
-		# Contents of all object pages
-		pages = [ page1, *extra_urls.map { |u| get_html(u) } ]
+		# extra_urls = Array.new(nbr_of_extra_pages) { |i| i + 2 }.map { |e| "#{url}&page=#{e}" }
+		# # Contents of all object pages
+		# pages = [ page1, *extra_urls.map { |u| get_html(u) } ]
 
-		links = Array.new
-		pages.each { |page| links << page.css('ul#search-results').xpath('//a[@class="item-link-container" and not(@data-tally-path)]').map { |e| e["href"] } }
-		links.flatten!
+		# links = Array.new
+		# pages.each { |page| links << page.css('ul#search-results').xpath('//a[@class="item-link-container" and not(@data-tally-path)]').map { |e| e["href"] } }
+		# links.flatten!
 
-		links.each { |link| Database.web_add_object(link) }
-		# Mark all items as no longer alive (0) first and then mark the ones still in list as alive (1)
-		@db.execute( "UPDATE objects SET alive = 'NO'" )
-		links.each { |link| @db.execute( "UPDATE objects SET alive = 'YES' WHERE link='#{link}'" ) }
-		links.each { |link| @db.execute( "UPDATE objects SET last_seen='#{now()}' WHERE link='#{link}'" ) }
+		# links.each { |link| Database.web_add_object(link) }
+		# # Mark all items as no longer alive (0) first and then mark the ones still in list as alive (1)
+		# @db.execute( "UPDATE objects SET alive = 'NO'" )
+		# links.each { |link| @db.execute( "UPDATE objects SET alive = 'YES' WHERE link='#{link}'" ) }
+		# links.each { |link| @db.execute( "UPDATE objects SET last_seen='#{now()}' WHERE link='#{link}'" ) }
 	end
 
 	def Database.web_add_datapoint(link)
